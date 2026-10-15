@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Base Converter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#e9eef5;--card:#fff;--ink:#16213a;--mute:#5b6786;--line:#cfd8e6;--acc:#2f4bd8;--acc-ink:#fff;--err:#c2321f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#10162a;--card:#19213b;--ink:#e8ecf8;--mute:#9aa6c7;--line:#2d3857;--acc:#7b93ff;--acc-ink:#10162a;--err:#ff8f7e}}
+:root[data-theme="dark"]{--bg:#10162a;--card:#19213b;--ink:#e8ecf8;--mute:#9aa6c7;--line:#2d3857;--acc:#7b93ff;--acc-ink:#10162a;--err:#ff8f7e}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{background:var(--bg);color:var(--ink);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif}
+.num{font-family:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+</style>
+</head>
+<body class="min-h-screen">
+<main class="mx-auto max-w-md px-4 py-6">
+  <div class="flex items-start justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold" data-i18n="title"></h1>
+      <p class="mt-1 text-sm" style="color:var(--mute)" data-i18n="sub"></p>
+    </div>
+    <button id="lang" class="shrink-0 rounded-lg px-3 py-1 text-sm font-medium" style="border:1px solid var(--line)"></button>
+  </div>
+
+  <section class="mt-5 rounded-xl p-4" style="background:var(--card);border:1px solid var(--line)">
+    <label for="inp" class="text-sm font-medium" data-i18n="input"></label>
+    <input id="inp" class="num mt-1 w-full rounded-lg px-3 py-3 text-xl" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)" value="1010" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <p id="err" class="mt-2 min-h-[1.25rem] text-sm" style="color:var(--err)" role="alert"></p>
+
+    <div class="mt-2 grid grid-cols-[1fr_auto_1fr] items-end gap-2">
+      <div>
+        <label for="from" class="text-sm font-medium" data-i18n="from"></label>
+        <select id="from" class="mt-1 w-full rounded-lg px-2 py-2" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)"></select>
+      </div>
+      <button id="swap" class="rounded-lg px-3 py-2" style="border:1px solid var(--line)">⇄</button>
+      <div>
+        <label for="to" class="text-sm font-medium" data-i18n="to"></label>
+        <select id="to" class="mt-1 w-full rounded-lg px-2 py-2" style="background:var(--bg);border:1px solid var(--line);color:var(--ink)"></select>
+      </div>
+    </div>
+    <div class="mt-3 flex gap-2" id="quick"></div>
+  </section>
+
+  <section class="mt-4 rounded-xl p-4" style="background:var(--card);border:1px solid var(--line)">
+    <div class="flex items-center justify-between">
+      <h2 class="text-sm font-medium" data-i18n="result"></h2>
+      <button id="copy" class="rounded-lg px-3 py-1 text-sm" style="background:var(--acc);color:var(--acc-ink)"></button>
+    </div>
+    <p id="out" class="num mt-2 break-all text-3xl font-semibold">—</p>
+  </section>
+
+  <details class="mt-4 rounded-xl p-4" style="background:var(--card);border:1px solid var(--line)">
+    <summary class="cursor-pointer text-sm font-medium" data-i18n="process"></summary>
+    <div id="steps" class="num mt-3 space-y-1 text-sm" style="color:var(--mute)"></div>
+  </details>
+</main>
+
+<script>
+const D = "0123456789abcdefghijklmnopqrstuvwxyz";
+const $ = id => document.getElementById(id);
+
+// ---- i18n ----
+const T = {
+  en: { title: "Base Converter", sub: "Bases 2–36, negative numbers and big integers", input: "Enter a number",
+        from: "From base", to: "To base", result: "Result", copy: "Copy result", copied: "Copied", copyFail: "Copy manually",
+        process: "Conversion steps", swapLabel: "Swap bases", toggle: "中文",
+        base: b => "Base " + b,
+        err: (c, f, ok) => `"${c}" is not a valid base-${f} digit (allowed: ${ok})`,
+        s1: f => `① Base ${f} → decimal (left to right)`,
+        s2: (v, t) => `② Decimal ${v} → base ${t} (read remainders bottom to top)`,
+        same: "Source and target bases are the same; no conversion needed" },
+  zh: { title: "進制轉換器", sub: "支援 2～36 進制、負數與大數", input: "輸入數字",
+        from: "來源進制", to: "目標進制", result: "結果", copy: "複製結果", copied: "已複製", copyFail: "請手動複製",
+        process: "轉換過程", swapLabel: "交換來源與目標進制", toggle: "English",
+        base: b => b + " 進制",
+        err: (c, f, ok) => `「${c}」不是合法的 ${f} 進制數字（可用：${ok}）`,
+        s1: f => `① ${f} 進制 → 十進位（由左到右）`,
+        s2: (v, t) => `② 十進位 ${v} → ${t} 進制（餘數由下往上讀）`,
+        same: "來源與目標相同，不需要轉換" }
+};
+// use the saved choice, otherwise follow the browser language
+let lang = (navigator.language || "").toLowerCase().startsWith("zh") ? "zh" : "en";
+try { lang = localStorage.getItem("lang") || lang; } catch (e) {}
+const t = k => T[lang][k];
+
+// ---- conversion (no parseInt / toString) ----
+// other base -> decimal: result = result * base + digit
+function toDecimal(str, base) {
+  let r = 0n, steps = [];
+  for (const ch of str) {
+    const d = BigInt(D.indexOf(ch)), prev = r;
+    r = r * BigInt(base) + d;
+    steps.push(`${prev} × ${base} + ${d} = ${r}`);
+  }
+  return { value: r, steps };
+}
+// decimal -> other base: divide repeatedly, read remainders in reverse
+function fromDecimal(n, base) {
+  if (n === 0n) return { text: "0", steps: ["0 ÷ " + base + " = 0 … 0"] };
+  let digits = "", steps = [], b = BigInt(base);
+  while (n > 0n) {
+    const q = n / b, r = n % b;
+    steps.push(`${n} ÷ ${base} = ${q} … ${D[Number(r)]}`);
+    digits = D[Number(r)] + digits;
+    n = q;
+  }
+  return { text: digits, steps };
+}
+function convert(input, from, to) {
+  let s = input.trim().toLowerCase(), neg = false;
+  if (s.startsWith("-")) { neg = true; s = s.slice(1); }
+  if (!s) return { error: "" };
+  const bad = [...s].find(c => D.indexOf(c) < 0 || D.indexOf(c) >= from);
+  if (bad) return { error: t("err")(bad, from, D.slice(0, from).toUpperCase()) };
+  const a = toDecimal(s, from), b = fromDecimal(a.value, to);
+  return { text: (neg && a.value !== 0n ? "-" : "") + b.text.toUpperCase(), a, b };
+}
+
+// ---- UI ----
+function render() {
+  const from = +$("from").value, to = +$("to").value;
+  const r = convert($("inp").value, from, to);
+  $("err").textContent = r.error || "";
+  $("out").textContent = r.text ?? "—";
+  const st = $("steps"); st.innerHTML = "";
+  if (!r.text) return;
+  const add = (x, strong) => { const p = document.createElement("p"); p.textContent = x; if (strong) p.style.color = "var(--ink)"; st.appendChild(p); };
+  if (from !== 10) { add(t("s1")(from), true); r.a.steps.forEach(x => add(x)); }
+  if (to !== 10) { add(t("s2")(r.a.value, to), true); r.b.steps.forEach(x => add(x)); }
+  if (from === 10 && to === 10) add(t("same"));
+}
+
+function fillSelects() {
+  const f = $("from").value || 2, o = $("to").value || 10;
+  for (const id of ["from", "to"]) {
+    $(id).innerHTML = "";
+    for (let b = 2; b <= 36; b++) $(id).add(new Option(t("base")(b), b));
+  }
+  $("from").value = f; $("to").value = o;
+  document.querySelectorAll("#quick button").forEach(btn => btn.textContent = t("base")(+btn.dataset.b));
+}
+
+function applyLang() {
+  document.documentElement.lang = lang === "zh" ? "zh-Hant" : "en";
+  document.title = t("title");
+  document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  $("lang").textContent = t("toggle");
+  $("copy").textContent = t("copy");
+  $("swap").setAttribute("aria-label", t("swapLabel"));
+  fillSelects();
+  render();
+}
+
+[2, 8, 10, 16].forEach(b => {
+  const btn = document.createElement("button");
+  btn.dataset.b = b;
+  btn.className = "flex-1 rounded-lg px-2 py-2 text-sm";
+  btn.style.border = "1px solid var(--line)";
+  btn.onclick = () => { $("to").value = b; render(); };
+  $("quick").appendChild(btn);
+});
+
+$("lang").onclick = () => {
+  lang = lang === "en" ? "zh" : "en";
+  try { localStorage.setItem("lang", lang); } catch (e) {}
+  applyLang();
+};
+$("swap").onclick = () => {
+  const f = $("from").value; $("from").value = $("to").value; $("to").value = f;
+  const o = $("out").textContent; if (o !== "—") $("inp").value = o;
+  render();
+};
+$("copy").onclick = async () => {
+  const o = $("out").textContent; if (o === "—") return;
+  try { await navigator.clipboard.writeText(o); $("copy").textContent = t("copied"); }
+  catch (e) { $("copy").textContent = t("copyFail"); }
+  setTimeout(() => $("copy").textContent = t("copy"), 1200);
+};
+["inp", "from", "to"].forEach(id => $(id).addEventListener("input", render));
+
+$("from").value = 2; $("to").value = 10;
+applyLang();
+</script>
+</body>
+</html>
